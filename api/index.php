@@ -1,59 +1,44 @@
 <?php
-// TUS CONFIGS
+// CONFIGURACIÓN PROBADA Y FUNCIONANDO
 $P_ID = "semcatrp183721293";
 $P_KEY = "AIzaSyB8UIE_aatbroEr28IB_3PtSDv3qwoPpjg";
-$COL  = "usuarios";
 
-$dump = ""; // Aquí guardaremos todo lo que "cace" el script
+$error = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $u = trim($_POST['usuario'] ?? '');
     $p = trim($_POST['contrasena'] ?? '');
 
-    $url = "https://firestore.googleapis.com/v1/projects/$P_ID/databases/(default)/documents/$COL/" . urlencode($u) . "?key=$P_KEY";
+    $url = "https://firestore.googleapis.com/v1/projects/$P_ID/databases/(default)/documents/usuarios/" . urlencode($u) . "?key=$P_KEY";
 
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     $res = curl_exec($ch);
-    $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
     $json = json_decode($res, true);
 
-    // --- CONSOLA DE DEBUG ---
-    $dump .= "<h3>--- RESULTADO DEL ESCANEO ---</h3>";
-    $dump .= "<b>URL consultada:</b> $url <br>";
-    $dump .= "<b>Código HTTP:</b> $http <br>";
-    
-    if ($http == 200) {
-        $dump .= "<b style='color:cyan'>[OK] Conexión establecida con el documento.</b><br>";
-        
-        // Verificamos qué campos existen realmente
-        if (isset($json['fields'])) {
-            $dump .= "<b>Campos encontrados en Firestore:</b><pre>" . print_r($json['fields'], true) . "</pre>";
+    if ($code == 200 && isset($json['fields']['contrasena']['stringValue'])) {
+        $passBD = $json['fields']['contrasena']['stringValue'];
+
+        if ($passBD === $p) {
+            // LOGIN EXITOSO
+            setcookie("auth_user", "ok", time() + 3600, "/");
             
-            $pass_firebase = $json['fields']['contrasena']['stringValue'] ?? null;
-            
-            if ($pass_firebase !== null) {
-                $dump .= "<b>Contraseña en BD:</b> <span style='color:yellow'>$pass_firebase</span><br>";
-                $dump .= "<b>Contraseña enviada:</b> <span style='color:yellow'>$p</span><br>";
-                
-                if ($pass_firebase === $p) {
-                    $dump .= "<h2 style='color:#0f0'>¡COINCIDENCIA TOTAL! El login funcionaría.</h2>";
-                } else {
-                    $dump .= "<h2 style='color:#f00'>ERROR: Las contraseñas NO coinciden.</h2>";
-                }
-            } else {
-                $dump .= "<h2 style='color:#f00'>ERROR: El campo 'contrasena' no existe en este documento.</h2>";
-            }
+            // REDIRECCIÓN "A PRUEBA DE BALAS" (Mezcla de JS y HTML)
+            echo "<html><body>
+                  <script>window.location.href='selectorAper.php';</script>
+                  <meta http-equiv='refresh' content='0;url=selectorAper.php'>
+                  <p>Redirigiendo...</p>
+                  </body></html>";
+            exit();
+        } else {
+            $error = "La contraseña no coincide.";
         }
-    } else if ($http == 404) {
-        $dump .= "<h2 style='color:#f00'>ERROR 404: El usuario '$u' no existe como ID de documento.</h2>";
-        $dump .= "<b>Respuesta cruda:</b> <pre>$res</pre>";
     } else {
-        $dump .= "<h2 style='color:#f00'>ERROR CRÍTICO: Código $http</h2>";
-        $dump .= "<b>Respuesta cruda:</b> <pre>" . htmlspecialchars($res) . "</pre>";
+        $error = "Usuario no encontrado o error de red.";
     }
 }
 ?>
@@ -62,28 +47,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>INSPECTOR FIRESTORE</title>
+    <title>Acceso Sistema</title>
     <style>
-        body { background:#1a1a1a; color:#ccc; font-family:monospace; padding:40px; }
-        .form-debug { background:#000; border:2px solid #555; padding:20px; margin-bottom:20px; }
-        input { background:#222; border:1px solid #444; color:#fff; padding:8px; margin-right:10px; }
-        button { padding:8px 20px; cursor:pointer; background:#444; color:#fff; border:1px solid #666; }
-        pre { background:#000; padding:10px; border:1px solid #333; color:#0f0; overflow:auto; }
-        h3 { color: #00d1b2; border-bottom:1px solid #333; padding-bottom:10px; }
+        body { background:#000; color:#0f0; font-family:monospace; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; }
+        .login-box { border:1px solid #0f0; padding:30px; background:#050505; box-shadow:0 0 15px #0f0; width:300px; }
+        input { width:100%; padding:10px; margin:10px 0; background:#000; border:1px solid #0f0; color:#0f0; box-sizing:border-box; outline:none; }
+        button { width:100%; padding:10px; background:#0f0; color:#000; border:none; font-weight:bold; cursor:pointer; }
+        button:hover { background:#000; color:#0f0; }
+        .err { color:#ff0000; text-align:center; margin-bottom:10px; font-size:12px; }
     </style>
 </head>
 <body>
-
-    <div class="form-debug">
-        <strong>Introduce datos para testear:</strong><br><br>
+    <div class="login-card">
         <form method="POST">
-            <input type="text" name="usuario" placeholder="ID Usuario" required>
-            <input type="text" name="contrasena" placeholder="Contraseña a probar" required>
-            <button type="submit">ESCANEAR</button>
+            <h2 style="text-align:center">LOGIN_ROOT</h2>
+            <?php if($error) echo "<div class='err'>$error</div>"; ?>
+            <input type="text" name="usuario" placeholder="USUARIO" required>
+            <input type="password" name="contrasena" placeholder="PASSWORD" required>
+            <button type="submit">ACCEDER</button>
         </form>
     </div>
-
-    <?php if($dump) echo $dump; ?>
-
 </body>
 </html>
