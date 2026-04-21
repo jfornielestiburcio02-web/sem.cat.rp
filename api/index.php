@@ -1,48 +1,59 @@
 <?php
-// CONFIGURACIÓN DE TU FIRESTORE
-$P_ID = "semcatrp183721293";
-$P_KEY = "AIzaSyB8UIE_aatbroEr28IB_3PtSDv3qwoPpjg";
+// --- CONFIGURACIÓN ---
+$C = [
+    "pid" => "semcatrp183721293",
+    "key" => "AIzaSyB8UIE_aatbroEr28IB_3PtSDv3qwoPpjg",
+    "col" => "usuarios"
+];
 
+$debug_info = "";
 $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $u = trim($_POST['usuario'] ?? '');
     $p = trim($_POST['contrasena'] ?? '');
 
-    $url = "https://firestore.googleapis.com/v1/projects/$P_ID/databases/(default)/documents/usuarios/" . urlencode($u) . "?key=$P_KEY";
+    // Construcción de URL
+    $url = "https://firestore.googleapis.com/v1/projects/{$C['pid']}/databases/(default)/documents/{$C['col']}/" . urlencode($u) . "?key=" . $C['key'];
 
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    
     $res = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_error = curl_error($ch);
     curl_close($ch);
 
+    // --- FILTRADOR Y DEBUGGER ---
     $json = json_decode($res, true);
-
-    // 1. VERIFICAMOS SI LA RESPUESTA ES EXITOSA (200)
-    if ($code == 200) {
-        
-        // 2. VERIFICAMOS SI EL CAMPO 'contrasena' EXISTE DENTRO DEL JSON
+    
+    // Guardamos info para debug (esto te dirá qué está pasando)
+    $debug_info .= "HTTP CODE: $http_code <br>";
+    if($curl_error) $debug_info .= "CURL ERR: $curl_error <br>";
+    
+    if ($http_code == 200 && $json) {
+        // Filtrar estructura de Firestore: fields -> contrasena -> stringValue
         if (isset($json['fields']['contrasena']['stringValue'])) {
+            $pass_db = $json['fields']['contrasena']['stringValue'];
             
-            $passBD = $json['fields']['contrasena']['stringValue'];
-
-            // 3. COMPARACIÓN REAL
-            if ($passBD === $p) {
+            if ($pass_db === $p) {
                 setcookie("auth_user", "ok", time() + 3600, "/");
-                // Redirección por JS para asegurar que el navegador la ejecute
                 echo "<script>window.location.href='selectorAper.php';</script>";
                 exit();
             } else {
-                $error = "CONTRASEÑA INCORRECTA";
+                $error = "PASSWORD_MISMATCH: Pusiste '$p' pero en BD hay '$pass_db'";
             }
         } else {
-            $error = "EL DOCUMENTO EXISTE PERO NO TIENE EL CAMPO 'contrasena'";
+            $error = "JSON_STRUCTURE_ERROR: No se encontró el campo 'contrasena'.";
+            $debug_info .= "ESTRUCTURA RECIBIDA: <pre>" . print_r($json['fields'] ?? 'Sin campos', true) . "</pre>";
         }
     } else {
-        // Si el código no es 200, es que el usuario no existe (404) o no hay permisos (403)
-        $error = "USUARIO NO ENCONTRADO (Error: $code)";
+        $error = "LOGIN_FAILED: Código $http_code";
+        if($http_code == 404) $error .= " - El documento '$u' no existe.";
+        if($http_code == 403) $error .= " - Permisos denegados (Revisa reglas de Firebase).";
+        $debug_info .= "RESPUESTA CRUDA: <pre>" . htmlspecialchars($res) . "</pre>";
     }
 }
 ?>
@@ -51,24 +62,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>LOGIN</title>
+    <title>DEBUG LOGIN</title>
     <style>
-        body { background:#000; color:#0f0; font-family:monospace; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; }
-        .box { border:1px solid #0f0; padding:20px; background:#111; text-align:center; }
-        input { display:block; width:250px; padding:10px; margin:10px 0; background:#000; border:1px solid #0f0; color:#0f0; }
+        body { background:#000; color:#0f0; font-family:monospace; padding:20px; }
+        .box { border:1px solid #0f0; padding:20px; max-width:400px; margin:auto; background:#0a0a0a; }
+        input { width:100%; padding:10px; margin:5px 0; background:#000; border:1px solid #0f0; color:#0f0; box-sizing:border-box; }
         button { width:100%; padding:10px; background:#0f0; border:none; cursor:pointer; font-weight:bold; }
-        .err { color:red; margin-bottom:10px; font-weight:bold; font-size:12px; }
+        .debug { background:#111; border:1px dashed #555; padding:10px; margin-top:20px; font-size:12px; color:#aaa; overflow-x:auto; }
+        .err { color:#ff0000; font-weight:bold; margin-bottom:10px; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2>SISTEMA LOG</h2>
-        <?php if($error) echo "<div class='err'>$error</div>"; ?>
-        <form method="POST">
-            <input type="text" name="usuario" placeholder="ID DOCUMENTO" required>
-            <input type="password" name="contrasena" placeholder="PASSWORD" required>
-            <button type="submit">ENTRAR</button>
-        </form>
+
+<div class="box">
+    <h3>SISTEMA DE ACCESO</h3>
+    <?php if($error) echo "<div class='err'>$error</div>"; ?>
+    
+    <form method="POST">
+        <input type="text" name="usuario" placeholder="Document ID (jmatamorosd)" required>
+        <input type="password" name="contrasena" placeholder="Contraseña" required>
+        <button type="submit">ENTRAR</button>
+    </form>
+
+    <?php if($debug_info): ?>
+    <div class="debug">
+        <strong>DEBUG INFO:</strong><br>
+        <?php echo $debug_info; ?>
     </div>
+    <?php endif; ?>
+</div>
+
 </body>
 </html>
