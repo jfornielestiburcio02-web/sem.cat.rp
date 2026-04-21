@@ -1,0 +1,60 @@
+{
+  "functions": {
+    "api/**/*.php": {
+      "runtime": "vercel-php@0.7.1"
+    }
+  },
+  "routes": [
+    {
+      "src": "/index.php",
+      "dest": "/api/index.php"
+    },
+    {
+      "src": "/sempresa/",
+      "dest": "/api/sempresa/index.php"
+    },
+    {
+      "src": "/ayudas/ayudaconapis.html",
+      "dest": "/api/ayudas/ayudaconapis.html"
+    },
+    {
+      "src": "/en/sempresa/",
+      "dest": "/api/en/sempresa/index.php"
+    },
+    {
+      "src": "/es/",
+      "dest": "/api/es/index.php"
+    },
+    {
+      "src": "/en/",
+      "dest": "/api/en/index.php"
+    },
+    {
+      "src": "/imagenes/(.*)",
+      "dest": "https://raw.githubusercontent.com/jfornielestiburcio02-web/hostingimage/main/imagenes/$1"
+    },
+    {
+      "src": "/(.*)\\.php",
+      "dest": "/api/$1.php"
+    },
+    {
+      "src": "/.env",
+      "dest": "/api/noPermitido.php"
+    },
+    {
+      "src": "/(.*)\\.xlx",
+      "status": 404
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Credentials", "value": "true" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
+        { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version" }
+      ]
+    }
+  ]
+}
