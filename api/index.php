@@ -1,55 +1,49 @@
 <?php
-// --- CONFIGURACIÓN PRIVADA (OCULTA EN EL SERVIDOR) ---
-$____ = [
-    "p" => "semcatrp183721293",                       // Tu Project ID
-    "k" => "AIzaSyB8UIE_aatbroEr28IB_3PtSDv3qwoPpjg", // Tu API Key
-    "c" => "usuarios"                                  // Tu Colección
+// CONFIGURACIÓN REAL (LADO DEL SERVIDOR - NADIE LA VE)
+$C = [
+    "pid" => "semcatrp183721293",
+    "key" => "AIzaSyB8UIE_aatbroEr28IB_3PtSDv3qwoPpjg",
+    "col" => "usuarios"
 ];
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $u = trim($_POST['usuario'] ?? '');
-    $p = trim($_POST['contrasena'] ?? '');
+session_start();
+$err = "";
 
-    if (!empty($u) && !empty($p)) {
-        // Endpoint directo a tu documento
-        $url = "https://firestore.googleapis.com/v1/projects/{$____['p']}/databases/(default)/documents/{$____['c']}/" . urlencode($u) . "?key=" . $____['k'];
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    $user = trim($_POST['usuario'] ?? '');
+    $pass = trim($_POST['contrasena'] ?? '');
+
+    if (!empty($user) && !empty($pass)) {
+        // URL de la API de Firestore (usando tu Project ID y API Key)
+        $url = "https://firestore.googleapis.com/v1/projects/{$C['pid']}/databases/(default)/documents/{$C['col']}/" . urlencode($user) . "?key=" . $C['key'];
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Evita fallos de certificados en el servidor
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         $res = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        $json = json_decode($res, true);
+        $data = json_decode($res, true);
 
-        // Verificamos si la contraseña en Firestore coincide con la escrita
-        if ($code == 200 && isset($json['fields']['contrasena']['stringValue'])) {
-            $dbPass = $json['fields']['contrasena']['stringValue'];
+        // Verificamos si el usuario existe y si la contraseña coincide exactamente
+        if ($http == 200 && isset($data['fields']['contrasena']['stringValue'])) {
+            $passEnBD = $data['fields']['contrasena']['stringValue'];
 
-            if ($dbPass === $p) {
-                // Generamos un ID de sesión aleatorio
-                $sid = bin2hex(random_bytes(8));
-
-                // PATCH: Guardamos la sesión en Firestore para validar luego
-                $patchUrl = "https://firestore.googleapis.com/v1/projects/{$____['p']}/databases/(default)/documents/{$____['c']}/" . urlencode($u) . "?updateMask.fieldPaths=phpsession&key=" . $____['k'];
-                $payload = json_encode(["fields" => ["phpsession" => ["stringValue" => $sid]]]);
-
-                $chP = curl_init($patchUrl);
-                curl_setopt($chP, CURLOPT_CUSTOMREQUEST, "PATCH");
-                curl_setopt($chP, CURLOPT_POSTFIELDS, $payload);
-                curl_setopt($chP, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($chP, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($chP, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-                curl_exec($chP);
-                curl_close($chP);
-
-                // Redirigimos a tu selector con la sesión en la cookie
-                setcookie("session_local", $sid, time() + 3600, "/");
+            if ($passEnBD === $pass) {
+                // LOGIN OK -> Crear cookie y redirigir
+                // Ponemos una cookie de sesión local (se borra al cerrar el navegador)
+                setcookie("auth_user", bin2hex(random_bytes(16)), 0, "/");
+                
                 header("Location: selectorAper.php");
                 exit();
-            } else { $error = "PASSWORD_INVALID"; }
-        } else { $error = "USER_NOT_FOUND"; }
+            } else {
+                $err = "CONTRASEÑA INCORRECTA";
+            }
+        } else {
+            $err = "USUARIO NO ENCONTRADO O ERROR DE CONEXIÓN";
+        }
     }
 }
 ?>
@@ -57,22 +51,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>ACCESO</title>
+    <title>SISTEMA</title>
     <style>
         body { background:#000; color:#0f0; font-family:monospace; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; }
-        .box { border:1px solid #0f0; padding:25px; background:#050505; box-shadow: 0 0 15px #0f0; }
+        .card { border:1px solid #0f0; padding:20px; background:#0a0a0a; box-shadow:0 0 10px #0f0; width:280px; }
         input { width:100%; padding:10px; margin:10px 0; background:#000; border:1px solid #0f0; color:#0f0; box-sizing:border-box; }
         button { width:100%; padding:10px; background:#0f0; color:#000; border:none; cursor:pointer; font-weight:bold; }
-        .err { color:red; text-align:center; margin-bottom:10px; }
+        .msg { color:#f00; font-size:12px; text-align:center; margin-bottom:10px; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2 style="text-align:center">LOGIN_SYSTEM</h2>
-        <?php if(isset($error)) echo "<div class='err'>$error</div>"; ?>
+    <div class="card">
+        <h2 style="text-align:center">ACCESS_REQUIRED</h2>
+        <?php if($err) echo "<div class='msg'>$err</div>"; ?>
         <form method="POST">
             <input type="text" name="usuario" placeholder="USUARIO" required>
-            <input type="password" name="contrasena" placeholder="CONTRASENA" required>
+            <input type="password" name="contrasena" placeholder="PASSWORD" required>
             <button type="submit">ENTRAR</button>
         </form>
     </div>
