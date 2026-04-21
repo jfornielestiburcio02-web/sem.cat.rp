@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-// 1. CONFIGURACIÓN "OCULTA" (Directamente en el código)
 $firebaseConfig = [
     "projectId" => "semcatrp183721293",
     "apiKey"    => "AIzaSyB8UIE_aatbroEr28IB_3PtSDv3qwoPpjg"
@@ -10,51 +9,47 @@ $firebaseConfig = [
 $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $userInput = $_POST['usuario'] ?? '';
-    $passInput = $_POST['contrasena'] ?? '';
+    $userInput = trim($_POST['usuario'] ?? '');
+    $passInput = trim($_POST['contrasena'] ?? '');
 
     if (!empty($userInput) && !empty($passInput)) {
-        
         $projectId = $firebaseConfig['projectId'];
-        
-        // 2. CONSTRUCCIÓN DE LA URL
-        // Importante: urlencode para evitar errores con carácteres especiales en el nombre de usuario
         $url = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents/usuarios/" . urlencode($userInput);
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Útil si el servidor tiene certificados viejos
+        
+        // --- SOLUCIÓN DE COMPATIBILIDAD ---
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); 
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        // ----------------------------------
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
 
         if ($httpCode == 200) {
             $data = json_decode($response, true);
-            
-            // 3. EXTRACCIÓN DE LA CONTRASEÑA
-            // Firestore devuelve los datos en un formato específico: fields -> contrasena -> stringValue
+            // IMPORTANTE: Asegúrate que en Firestore sea 'contrasena' con N
             $passwordInFirestore = $data['fields']['contrasena']['stringValue'] ?? null;
 
             if ($passwordInFirestore !== null && $passwordInFirestore === $passInput) {
-                // LOGIN OK
                 $_SESSION['autenticado'] = true;
                 $_SESSION['usuario'] = $userInput;
                 
+                // Si esto falla, intenta poner la URL completa: http://tusitio.com/selectorAper.php
                 header("Location: selectorAper.php");
                 exit();
             } else {
-                $error = "Contraseña incorrecta.";
+                $error = "Contraseña incorrecta (Recibido de BD: $passwordInFirestore)";
             }
-        } elseif ($httpCode == 404) {
-            $error = "El usuario '$userInput' no existe en Firestore.";
         } else {
-            $error = "Error de conexión con base de datos (Código: $httpCode).";
+            // Esto nos dirá si el problema es de Firebase o de tu servidor
+            $error = "Error Detallado: HTTP $httpCode. " . ($curlError ? "CURL Error: $curlError" : "Respuesta: $response");
         }
-    } else {
-        $error = "Por favor, completa todos los campos.";
     }
 }
 ?>
